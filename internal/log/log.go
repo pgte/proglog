@@ -49,7 +49,7 @@ func (l *Log) setup() error {
 		off, _ := strconv.ParseUint(offStr, 10, 0)
 		baseOffsets = append(baseOffsets, off)
 	}
-	sort.Slice(baseOffsets, func(i, j) bool {
+	sort.Slice(baseOffsets, func(i, j int) bool {
 		return baseOffsets[i] < baseOffsets[j]
 	})
 	for i := 0; i < len(baseOffsets); i++ {
@@ -82,7 +82,7 @@ func (l *Log) Append(record *api.Record) (uint64, error) {
 	return off, err
 }
 
-func (l *Log) Read(off uint64) (*api.Record, err) {
+func (l *Log) Read(off uint64) (*api.Record, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	var s *segment
@@ -125,13 +125,13 @@ func (l *Log) Reset() error {
 	return l.setup()
 }
 
-func (l *Log) LowestOffset() (uint64, err) {
+func (l *Log) LowestOffset() (uint64, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	return l.segments[0].baseOffset, nil
 }
 
-func (l *Log) HighestOffset() (uint64, err) {
+func (l *Log) HighestOffset() (uint64, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	off := l.segments[len(l.segments)-1].nextOffset
