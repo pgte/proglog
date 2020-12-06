@@ -17,11 +17,11 @@ type grpcServer struct {
 	*Config
 }
 
-func newgrpcServer(config *Config) (srv *grpcServer, err error) {
-	srv = &grpcServer{
+func newgrpcServer(config *Config) *grpcServer {
+	srv := &grpcServer{
 		Config: config,
 	}
-	return srv, nil
+	return srv
 }
 
 func (s *grpcServer) Produce(ctx context.Context, req *api.ProduceRequest) (*api.ProduceResponse, error) {
@@ -83,12 +83,9 @@ type CommitLog interface {
 	Read(uint64) (*api.Record, error)
 }
 
-func NewGRPCServer(config *Config) (*grpc.Server, error) {
-	gsrv := grpc.NewServer()
-	srv, err := newgrpcServer(config)
-	if err != nil {
-		return nil, err
-	}
+func NewGRPCServer(log *Config, opts ...grpc.ServerOption) *grpc.Server {
+	gsrv := grpc.NewServer(opts...)
+	srv := newgrpcServer(log)
 	api.RegisterLogServer(gsrv, srv)
-	return gsrv, nil
+	return gsrv
 }
