@@ -19,8 +19,8 @@ func TestServer(t *testing.T) {
 		config *Config,
 	){
 		"produce/consume a message to/from the log succeeeds": testProduceConsume,
-		// "produce/consume stream succeeds":                     testProduceConsumeStream,
-		// "consume past log boundary fails":                     testConsumePastBoundary,
+		"consume past log boundary fails":                     testConsumePastBoundary,
+		"produce/consume stream succeeds":                     testProduceConsumeStream,
 	} {
 		t.Run(scenario, func(t *testing.T) {
 			client, config, teardown := setupTest(t, nil)
@@ -92,4 +92,78 @@ func testProduceConsume(t *testing.T, client api.LogClient, config *Config) {
 	require.NoError(t, err)
 
 	require.Equal(t, want, consume.Record)
+}
+
+func testConsumePastBoundary(t *testing.T, client api.LogClient, config *Config) {
+	ctx := context.Background()
+
+	produce, err := client.Produce(ctx, &api.ProduceRequest{
+		Record: &api.Record{
+			Value: []byte("hello world"),
+		},
+	})
+	require.NoError(t, err)
+
+	consume, err := client.Consume(ctx, &api.ConsumeRequest{
+		Offset: produce.Offset + 1,
+	})
+	if consume != nil {
+		t.Fatal("consume not nil")
+	}
+	got := grpc.Code(err)
+	want := grpc.Code(api.ErrOffsetOutOfRange{}.GRPCStatus().Err())
+	if got != want {
+		t.Fatalf("got err: %v, want: %v", got, want)
+	}
+}
+
+func testProduceConsumeStream(t *testing.T, client api.LogClient, config *Config) {
+	ctx := context.Background()
+
+	records := []api.Record{
+		{
+			Value:  []byte("first message"),
+			Offset: 0,
+		},
+		{
+			Value:  []byte("second message"),
+			Offset: 1,
+		},
+	}
+
+	{
+		stream, err := client.ProduceStream(ctx)
+		require.NoError(t, err)
+
+		for offset, record := range records {
+			err = stream.Send(&api.ProduceRequest{
+				Record: &record,
+			})
+			require.NoError(t, err)
+
+			res, err := stream.Recv()
+			require.NoError(t, err)
+			if res.Offset != uint64(offset) {
+				t.Errorf(
+					"got offset: %d, want: %d",
+					res.Offset,
+					offset,
+				)
+			}
+		}
+
+		{
+			stream, err := client.ConsumeStream(ctx, &api.ConsumeRequest{
+				Offset: 0,
+			})
+			require.NoError(t, err)
+
+			for _, record := range records {
+				res, err := stream.Recv()
+				require.NoError(t, err)
+				require.Equal(t, res.Record.Value, record.Value)
+				require.Equal(t, res.Record.Offset, record.Offset)
+			}
+		}
+	}
 }
